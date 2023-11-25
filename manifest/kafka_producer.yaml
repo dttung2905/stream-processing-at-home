@@ -1,0 +1,37 @@
+apiVersion: batch/v1
+kind: Job
+metadata:
+  labels:
+    app: kafka-producer-job
+  name: kafka-producer-job
+  namespace: default 
+spec:
+  parallelism: 5
+  completions: 5
+  backoffLimit: 1
+  template:
+    metadata:
+      name: kafka-perf-producer
+      labels:
+        app: kafka-perf-producer
+    spec:
+      restartPolicy: Never
+      containers:
+      - name: kafka-perf-producer
+        image: quay.io/strimzi/kafka:0.24.0-kafka-2.7.1
+        command: [ "bin/kafka-producer-perf-test.sh" ]
+        args: [ "--topic", "my-topic", "--throughput", "100000", "--num-records", "1200000", "--producer-props", "bootstrap.servers=test-cluster-kafka-bootstrap.default.svc:9092", "--record-size", "10" ]
+        volumeMounts:
+        - name: strimzi-ca
+          readOnly: true
+          mountPath: "/etc/strimzi"
+        env:
+        - name: CA_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: test-cluster-cluster-ca-cert
+              key: ca.password
+      volumes:
+      - name: strimzi-ca
+        secret:
+          secretName: test-cluster-cluster-ca-cert

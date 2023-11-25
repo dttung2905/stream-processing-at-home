@@ -1,0 +1,17 @@
+apiVersion: keda.sh/v1alpha1
+kind: ScaledObject
+metadata:
+  name: kafka-scaledobject
+  namespace: default
+spec:
+  scaleTargetRef:
+    name: kafka-consumer 
+  pollingInterval: 5 
+  triggers:
+  - type: kafka
+    metadata:
+      bootstrapServers: test-cluster-kafka-bootstrap.default.svc:9092
+      consumerGroup: my-kafka-consumer       # Make sure that this consumer group name is the same one as the one that is consuming topics
+      topic: my-topic
+      # Optional
+      lagThreshold: "5"

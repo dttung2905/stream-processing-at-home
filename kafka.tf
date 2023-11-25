@@ -12,14 +12,18 @@ resource "helm_release" "strimzi" {
 }
 
 resource "kubectl_manifest" "kafka_cluster" {
-  yaml_body = file("${path.module}/kafka_cluster.yaml")
+  yaml_body = file("${path.module}/manifest/kafka_cluster.yaml")
 }
 
 resource "kubectl_manifest" "kafka-consumer-app" {
-  yaml_body = file("${path.module}/kafka_consumer.yaml")
+  yaml_body = file("${path.module}/manifest/kafka_consumer.yaml")
+}
+
+resource "kubectl_manifest" "kafka-producer-job" {
+  yaml_body = file("${path.module}/manifest/kafka_producer.yaml")
 }
 
 resource "kubectl_manifest" "kafka-topic-my-topic" {
-  yaml_body = file("${path.module}/kafka_consumer.yaml")
+  yaml_body = file("${path.module}/manifest/kafka-topic.yaml")
 }
 
