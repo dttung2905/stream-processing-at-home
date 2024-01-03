@@ -20,7 +20,7 @@ spec:
       - name: kafka-perf-producer
         image: quay.io/strimzi/kafka:0.24.0-kafka-2.7.1
         command: [ "bin/kafka-producer-perf-test.sh" ]
-        args: [ "--topic", "my-topic", "--throughput", "100000", "--num-records", "1200000", "--producer-props", "bootstrap.servers=test-cluster-kafka-bootstrap.default.svc:9092", "--record-size", "10" ]
+        args: [ "--topic", "myTopicAbcd", "--throughput", "100000", "--num-records", "1200000", "--producer-props", "bootstrap.servers=test-cluster-kafka-bootstrap.default.svc:9092", "--record-size", "10" ]
         volumeMounts:
         - name: strimzi-ca
           readOnly: true

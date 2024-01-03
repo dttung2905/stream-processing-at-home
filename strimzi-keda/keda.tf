@@ -2,7 +2,7 @@ resource "helm_release" "keda" {
   name      = "keda"
   repository = "https://kedacore.github.io/charts"
   chart     = "keda"
-  version   = "2.12"  # Replace with the desired version
+  version   = "2.12.0"  # Replace with the desired version
 }
 
 resource "kubectl_manifest" "kafka_scaled_object" {

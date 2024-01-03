@@ -12,6 +12,6 @@ spec:
     metadata:
       bootstrapServers: test-cluster-kafka-bootstrap.default.svc:9092
       consumerGroup: my-kafka-consumer       # Make sure that this consumer group name is the same one as the one that is consuming topics
-      topic: my-topic
+      topic: myTopicAbcd
       # Optional
       lagThreshold: "5"

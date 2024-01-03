@@ -29,7 +29,7 @@ spec:
           - name: BOOTSTRAP_SERVERS
             value: test-cluster-kafka-bootstrap.default.svc:9092
           - name: TOPIC
-            value: my-topic
+            value: myTopicAbcd
           - name: GROUP_ID
             value: my-kafka-consumer
 
