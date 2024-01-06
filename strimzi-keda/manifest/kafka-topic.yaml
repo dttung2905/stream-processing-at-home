@@ -1,10 +1,11 @@
 apiVersion: kafka.strimzi.io/v1beta1
 kind: KafkaTopic
 metadata:
-  name: myTopicAbcd
+  name: mytopic
   labels:
     strimzi.io/cluster: test-cluster
 spec:
+  topicName: myTopic
   partitions: 5
   replicas: 3
   config:

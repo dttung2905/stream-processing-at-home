@@ -1,89 +1,116 @@
-## Test code for Strimzi Kafka and KEDA
+## Test code for KEDA issue https://github.com/kedacore/keda/issues/5102
 
-**Step 1**: Comment out the code for the kafka batch job producer
+- Install helm kafka and kafka helm release
+```bash
+terraform apply --target=helm_release.keda
+terraform apply --target=kubectl_manifest.kafka_cluster
+```
+- Create the mixed-case topic `kafkaTopic`
+```bash
+terraform apply --target=kubectl_manifest.kafka-topic-my-topic
+```
+  The topic should exist
+```bash
+[kafka@test-cluster-kafka-0 kafka]$ bin/kafka-topics.sh --list --bootstrap-server test-cluster-kafka-bootstrap.default.svc:9092
+__consumer_offsets
+__strimzi-topic-operator-kstreams-topic-store-changelog
+__strimzi_store_topic
+myTopic
+```
+- Create the consumer and follow up by creating the KEDA scaledObject
+```bash
+terraform apply --target=kubectl_manifest.kafka-consumer-app
+terraform apply --target=kubectl_manifest.kafka_scaled_object
+```
+- Now you will see the consumer pod being scaled out to 5 replicas. Describing HPA will give the following information
+```
+❯ k describe hpa keda-hpa-kafka-scaledobject
+Name:                                         keda-hpa-kafka-scaledobject
+Namespace:                                    default
+Labels:                                       app.kubernetes.io/managed-by=keda-operator
+                                              app.kubernetes.io/name=keda-hpa-kafka-scaledobject
+                                              app.kubernetes.io/part-of=kafka-scaledobject
+                                              app.kubernetes.io/version=2.12.0
+                                              scaledobject.keda.sh/name=kafka-scaledobject
+Annotations:                                  <none>
+CreationTimestamp:                            Sat, 06 Jan 2024 10:34:41 +0000
+Reference:                                    Deployment/kafka-consumer
+Metrics:                                      ( current / target )
+  "s0-kafka-myTopic" (target average value):  0 / 5
+Min replicas:                                 1
+Max replicas:                                 100
+Deployment pods:                              5 current / 5 desired
+Conditions:
+  Type            Status  Reason               Message
+  ----            ------  ------               -------
+  AbleToScale     True    ScaleDownStabilized  recent recommendations were higher than current one, applying the highest recent recommendation
+  ScalingActive   True    ValidMetricFound     the HPA was able to successfully calculate a replica count from external metric s0-kafka-myTopic(&LabelSelector{MatchLabels:map[string]string{scaledobject.keda.sh/name: kafka-scaledobject,},MatchExpressions:[]LabelSelectorRequirement{},})
+  ScalingLimited  False   DesiredWithinRange   the desired count is within the acceptable range
+Events:
+  Type    Reason             Age    From                       Message
+  ----    ------             ----   ----                       -------
+  Normal  SuccessfulRescale  9m     horizontal-pod-autoscaler  New size: 4; reason: external metric s0-kafka-myTopic(&LabelSelector{MatchLabels:map[string]string{scaledobject.keda.sh/name: kafka-scaledobject,},MatchExpressions:[]LabelSelectorRequirement{},}) above target
+  Normal  SuccessfulRescale  8m45s  horizontal-pod-autoscaler  New size: 5; reason: external metric s0-kafka-myTopic(&LabelSelector{MatchLabels:map[string]string{scaledobject.keda.sh/name: kafka-scaledobject,},MatchExpressions:[]LabelSelectorRequirement{},}) above target
+```
+- Wait for a while until the consumer lag is 0. The consumer will be scaled down from 5 to 1 pods and finally 0 pods
+```
+❯ k exec -it test-cluster-kafka-0 -- bash
+Defaulted container "kafka" out of: kafka, kafka-init (init)
+[kafka@test-cluster-kafka-0 kafka]$ bin/kafka-consumer-groups.sh --bootstrap-server test-cluster-kafka-bootstrap.default.svc:9092 --describe --group my-kafka-consumer
+
+GROUP             TOPIC           PARTITION  CURRENT-OFFSET  LOG-END-OFFSET  LAG             CONSUMER-ID                                                       HOST            CLIENT-ID
+my-kafka-consumer myTopic         4          1204485         1204485         0               consumer-my-kafka-consumer-1-c8e6f2a0-6cc4-41bc-a7ce-3c738f75e3c6 /10.244.0.18    consumer-my-kafka-consumer-1
+my-kafka-consumer myTopic         2          1175266         1175266         0               consumer-my-kafka-consumer-1-54ac10db-4924-494b-be1b-af75bf883867 /10.244.0.21    consumer-my-kafka-consumer-1
+my-kafka-consumer myTopic         0          1191455         1191455         0               consumer-my-kafka-consumer-1-07279d90-3dbf-4885-9fa0-d684edd056f3 /10.244.0.12    consumer-my-kafka-consumer-1
+my-kafka-consumer myTopic         1          1201317         1201317         0               consumer-my-kafka-consumer-1-2e09d0c7-0425-4db5-881a-4c26c926a719 /10.244.0.22    consumer-my-kafka-consumer-1
+my-kafka-consumer myTopic         3          1227477         1227477         0               consumer-my-kafka-consumer-1-a88d9d8c-cb5e-4a9a-8a63-1adb8252a4ed /10.244.0.20    consumer-my-kafka-consumer-1
+```
 
 ```
-resource "kubectl_manifest" "kafka-producer-job" {
-  yaml_body = file("${path.module}/manifest/kafka_producer.yaml")
-}
-```
+❯ k describe hpa keda-hpa-kafka-scaledobject
+Name:                                         keda-hpa-kafka-scaledobject
+Namespace:                                    default
+Labels:                                       app.kubernetes.io/managed-by=keda-operator
+                                              app.kubernetes.io/name=keda-hpa-kafka-scaledobject
+                                              app.kubernetes.io/part-of=kafka-scaledobject
+                                              app.kubernetes.io/version=2.12.0
+                                              scaledobject.keda.sh/name=kafka-scaledobject
+Annotations:                                  <none>
+CreationTimestamp:                            Sat, 06 Jan 2024 10:34:41 +0000
+Reference:                                    Deployment/kafka-consumer
+Metrics:                                      ( current / target )
+  "s0-kafka-myTopic" (target average value):  <unknown> / 5
+Min replicas:                                 1
+Max replicas:                                 100
+Deployment pods:                              0 current / 0 desired
+Conditions:
+  Type            Status  Reason             Message
+  ----            ------  ------             -------
+  AbleToScale     True    SucceededGetScale  the HPA controller was able to get the target's current scale
+  ScalingActive   False   ScalingDisabled    scaling is disabled since the replica count of the target is zero
+  ScalingLimited  True    TooFewReplicas     the desired replica count is less than the minimum replica count
+Events:
+  Type    Reason             Age    From                       Message
+  ----    ------             ----   ----                       -------
+  Normal  SuccessfulRescale  9m59s  horizontal-pod-autoscaler  New size: 4; reason: external metric s0-kafka-myTopic(&LabelSelector{MatchLabels:map[string]string{scaledobject.keda.sh/name: kafka-scaledobject,},MatchExpressions:[]LabelSelectorRequirement{},}) above target
+  Normal  SuccessfulRescale  9m44s  horizontal-pod-autoscaler  New size: 5; reason: external metric s0-kafka-myTopic(&LabelSelector{MatchLabels:map[string]string{scaledobject.keda.sh/name: kafka-scaledobject,},MatchExpressions:[]LabelSelectorRequirement{},}) above target
+  Normal  SuccessfulRescale  28s    horizontal-pod-autoscaler  New size: 1; reason: All metrics below target
 
-**Step 2**: Run terraform plan and apply. We will see a strimzi cluster created with topic `my-topic`, a kafka consumer app deployment
-
 ```
-terraform init
-terraform plan
-terraform apply
+- We can get the metrics straight from metrics server too
 ```
-HPA is also deployed
-```
-❯ k get hpa
-NAME                          REFERENCE                   TARGETS             MINPODS   MAXPODS   REPLICAS   AGE
-keda-hpa-kafka-scaledobject   Deployment/kafka-consumer   <unknown>/5 (avg)   1         100       0          3h22m
-```
-We can see the metrics from metric apiserver
-```
-❯ kubectl get --raw "/apis/external.metrics.k8s.io/v1beta1/namespaces/default/s0-kafka-my-topic?labelSelector=scaledobject.keda.sh%2Fname%3Dkafka-scaledobject" | jq
+ kubectl get --raw "/apis/external.metrics.k8s.io/v1beta1/namespaces/default/s0-kafka-myTopic?labelSelector=scaledobject.keda.sh%2Fname%3Dkafka-scaledobject" | jq
 {
   "kind": "ExternalMetricValueList",
   "apiVersion": "external.metrics.k8s.io/v1beta1",
   "metadata": {},
   "items": [
     {
-      "metricName": "s0-kafka-my-topic",
+      "metricName": "s0-kafka-myTopic",
       "metricLabels": null,
-      "timestamp": "2023-11-25T11:34:18Z",
+      "timestamp": "2024-01-06T10:47:33Z",
       "value": "0"
     }
   ]
 }
 ```
-
-**Step 3**: Uncomment the code block from step 1 and run terraform plan and apply again.
-You will see a producer job being deployed. Scaled object will scale from 0 to 1 replicas and HPA will handle the scaling from 1 to 5 replica
-
-```
-❯ k describe hpa keda-hpa-kafka-scaledobject
-Name:               keda-hpa-kafka-scaledobject
-Namespace:          default
-Labels:             app.kubernetes.io/managed-by=keda-operator
-                    app.kubernetes.io/name=keda-hpa-kafka-scaledobject
-                    app.kubernetes.io/part-of=kafka-scaledobject
-                    app.kubernetes.io/version=2.12.0
-                    scaledobject.keda.sh/name=kafka-scaledobject
-Annotations:        autoscaling.alpha.kubernetes.io/conditions:
-                      [{"type":"AbleToScale","status":"True","lastTransitionTime":"2023-11-25T10:48:46Z","reason":"ReadyForNewScale","message":"recommended size...
-                    autoscaling.alpha.kubernetes.io/current-metrics:
-                      [{"type":"External","external":{"metricName":"s0-kafka-my-topic","metricSelector":{"matchLabels":{"scaledobject.keda.sh/name":"kafka-scale...
-                    autoscaling.alpha.kubernetes.io/metrics:
-                      [{"type":"External","external":{"metricName":"s0-kafka-my-topic","metricSelector":{"matchLabels":{"scaledobject.keda.sh/name":"kafka-scale...
-CreationTimestamp:  Sat, 25 Nov 2023 08:11:08 +0000
-Reference:          Deployment/kafka-consumer
-Min replicas:       1
-Max replicas:       100
-Deployment pods:    5 current / 5 desired
-Events:
-  Type     Reason             Age                  From                       Message
-  ----     ------             ----                 ----                       -------
-  Normal   SuccessfulRescale  81m                  horizontal-pod-autoscaler  New size: 1; reason: All metrics below target
-  Warning  FailedGetScale     22m                  horizontal-pod-autoscaler  Unauthorized
-  Normal   SuccessfulRescale  3m48s (x2 over 91m)  horizontal-pod-autoscaler  New size: 4; reason: external metric s0-kafka-my-topic(&LabelSelector{MatchLabels:map[string]string{scaledobject.keda.sh/name: kafka-scaledobject,},MatchExpressions:[]LabelSelectorRequirement{},}) above target
-  Normal   SuccessfulRescale  3m33s (x2 over 90m)  horizontal-pod-autoscaler  New size: 5; reason: external metric s0-kafka-my-topic(&LabelSelector{MatchLabels:map[string]string{scaledobject.keda.sh/name: kafka-scaledobject,},MatchExpressions:[]LabelSelectorRequirement{},}) above target
-```
-
-To check the consumer group lag. We can run the following command
-```
-# Expose the service to local
-minikube service test-cluster-kafka-external4-bootstrap --url
-
-❯ bin/kafka-consumer-groups.sh --bootstrap-server 192.168.49.2:32118 --describe --group my-kafka-consumer
-GROUP             TOPIC           PARTITION  CURRENT-OFFSET  LOG-END-OFFSET  LAG             CONSUMER-ID                                                       HOST            CLIENT-ID
-my-kafka-consumer my-topic        0          2228364         2399831         171467          consumer-my-kafka-consumer-1-4ada33da-308c-42a7-932b-bd2691ed7598 /10.244.0.87    consumer-my-kafka-consumer-1
-my-kafka-consumer my-topic        3          2210351         2388936         178585          consumer-my-kafka-consumer-1-cd10f502-b24e-4af1-a5ba-4c8fde12f618 /10.244.0.84    consumer-my-kafka-consumer-1
-my-kafka-consumer my-topic        2          2220899         2427129         206230          consumer-my-kafka-consumer-1-97d3577b-0df4-40f3-951c-35ad2ec07040 /10.244.0.88    consumer-my-kafka-consumer-1
-my-kafka-consumer my-topic        4          2190964         2400632         209668          consumer-my-kafka-consumer-1-ec8d6b27-1ae1-42a0-8345-99884f006300 /10.244.0.83    consumer-my-kafka-consumer-1
-my-kafka-consumer my-topic        1          2210001         2383472         173471          consumer-my-kafka-consumer-1-52ebe974-5131-47ff-b8b8-7283f032c619 /10.244.0.86    consumer-my-kafka-consumer-1
-
-```
-
-**Step 4**: Continue monitoring. Once the offset lag reaches 0 for all partitions, HPA will scale down from 5 to 1 and KEDA will scale from 1 to 0 replicas
